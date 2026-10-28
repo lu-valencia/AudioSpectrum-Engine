@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Espectro de sonido — Analizador de Fourier</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#1e293b; --muted:#64748b;
+    --primary:#4f46e5; --primary-dark:#4338ca; --accent:#0d9488;
+    --danger:#dc2626; --ok:#16a34a; --border:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  header{background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff;padding:26px 20px;text-align:center}
+  header h1{font-size:1.5rem;font-weight:700}
+  header p{opacity:.85;font-size:.9rem;margin-top:4px}
+  .tabs{display:flex;gap:8px;max-width:1100px;margin:18px auto 0;padding:0 16px}
+  .tab{padding:10px 18px;border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;background:#e9edf5;color:var(--muted);font-weight:600;font-size:.9rem;cursor:pointer}
+  .tab.activa{background:var(--card);color:var(--primary-dark)}
+  main{max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(15,23,42,.06)}
+  .card h2{font-size:1.05rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .card h2 .num{background:var(--primary);color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem}
+  .grid-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:600}
+  input,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;background:#fff}
+  input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border:none;border-radius:9px;font-size:.9rem;font-weight:600;cursor:pointer;transition:.15s;text-decoration:none}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover:not(:disabled){background:var(--primary-dark)}
+  .btn-secondary{background:#eef2ff;color:var(--primary)}.btn-secondary:hover:not(:disabled){background:#e0e7ff}
+  .btn-ghost{background:#f1f5f9;color:var(--ink)}.btn-ghost:hover:not(:disabled){background:#e2e8f0}
+  .btn-verde{background:var(--ok);color:#fff}.btn-verde:hover:not(:disabled){background:#15803d}
+  .btn-rojo{background:var(--danger);color:#fff}
+  .btn-gris{background:#334155;color:#cbd5e1}.btn-gris:hover:not(:disabled){background:#475569}
+  .acciones{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .descargas{display:flex;flex-wrap:wrap;gap:8px}
+  #log{margin-top:14px;background:#0f172a;color:#cbd5e1;font-family:ui-monospace,Consolas,monospace;font-size:.78rem;border-radius:10px;padding:12px 14px;max-height:170px;overflow-y:auto;white-space:pre-wrap}
+  #log .err{color:#fca5a5}#log .ok{color:#86efac}#log .aviso{color:#fbbf24}
+  .metricas{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+  .metrica{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .metrica .valor{font-size:1.2rem;font-weight:700;color:var(--primary-dark)}
+  .metrica .valor small{font-size:.78rem;color:var(--muted);font-weight:400}
+  .metrica .etiqueta{font-size:.7rem;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+  #resumen{background:#0f172a;color:#e2e8f0;font-family:ui-monospace,Consolas,monospace;font-size:.78rem;border-radius:10px;padding:14px;white-space:pre;overflow-x:auto;margin-top:14px;min-height:60px}
+  .figuras{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.figuras{grid-template-columns:1fr}}
+  .figura canvas{width:100%;height:280px;border:1px solid var(--border);border-radius:10px;background:#fff}
+  /* ---------- Detector en vivo ---------- */
+  .panel-vivo{display:grid;grid-template-columns:330px 1fr;gap:20px;background:#0f172a;border-color:#0f172a;color:#e2e8f0}
+  @media(max-width:860px){.panel-vivo{grid-template-columns:1fr}}
+  .vivo-freq{font-size:3.3rem;font-weight:800;color:#fff;line-height:1.05}
+  .vivo-freq small{font-size:1.25rem;color:#94a3b8;font-weight:600}
+  .vivo-sub{font-size:1.35rem;font-weight:700;color:#5eead4;margin-top:6px}
+  .vivo-label{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-top:8px}
+  .gauge{height:8px;background:#1e293b;border-radius:4px;margin:14px 0 4px;position:relative}
+  .gauge::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:#475569}
+  #v-gauge-dot{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:#5eead4;transform:translateX(-50%);left:50%;transition:left .12s}
+  .vivo-botones{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .vivo-estado{font-size:.8rem;color:#94a3b8;margin-top:12px;min-height:2.4em}
+  .vivo-espectro canvas{width:100%;height:300px;border-radius:10px;background:#020617;display:block}
+  .nota-hint{color:var(--muted);font-size:.82rem;margin-top:-8px}
+  .vivo-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:20px}
+  @media(max-width:860px){.vivo-grid{grid-template-columns:1fr}}
+  #v-top{list-style:none;min-height:120px}
+  #v-top li{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px dashed var(--border);font-family:ui-monospace,Consolas,monospace;font-size:.85rem}
+  #v-top .pos{color:var(--primary-dark);font-weight:700;margin-right:10px}
+  canvas#cv-historial{width:100%;height:250px;display:block}
+  footer{text-align:center;color:var(--muted);font-size:.8rem;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Espectro de sonido — Analizador de Fourier</h1>
+  <p>Detector de frecuencia en vivo y análisis por lotes · frontend del proyecto Python <code>espectro_sonido</code></p>
+</header>
+
+<div class="tabs" role="tablist">
+  <button class="tab activa" data-tab="vivo">🎙️ Detector en vivo</button>
+  <button class="tab" data-tab="lote">📊 Análisis de muestra</button>
+</div>
+
+<main>
+  <!-- ==================== PESTAÑA: DETECTOR EN VIVO ==================== -->
+  <section id="tab-vivo">
+    <div class="card panel-vivo">
+      <div>
+        <div class="vivo-freq"><span id="v-freq">—</span><small> Hz</small></div>
+        <div class="vivo-sub"><span id="v-nota">—</span> · <span id="v-cents">— ¢</span></div>
+        <div class="gauge"><div id="v-gauge-dot"></div></div>
+        <div class="vivo-label">Frecuencia fundamental (tono)</div>
+        <div class="vivo-botones">
+          <button id="btn-vivo" class="btn btn-verde">▶ Comenzar</button>
+          <button id="btn-congelar" class="btn btn-gris" disabled>❄ Congelar</button>
+          <button id="btn-reiniciar" class="btn btn-ghost">↺ Reiniciar</button>
+        </div>
+        <div id="v-estado" class="vivo-estado">Listo. Pulsa «Comenzar» para detectar tonos en tiempo real.</div>
+      </div>
+      <div class="vivo-espectro"><canvas id="cv-espectro"></canvas></div>
+    </div>
+    <p class="nota-hint" style="margin-top:10px">Al detener o congelar, los valores mínimo, máximo y el historial se conservan hasta pulsar «Reiniciar».</p>
+
+    <div class="metricas" style="margin-top:16px">
+      <div class="metrica"><div class="valor" id="v-min">—</div><div class="etiqueta">Mínimo (Hz)</div></div>
+      <div class="metrica"><div class="valor" id="v-max">—</div><div class="etiqueta">Máximo (Hz)</div></div>
+      <div class="metrica"><div class="valor" id="v-avg">—</div><div class="etiqueta">Promedio (Hz)</div></div>
+      <div class="metrica"><div class="valor" id="v-pico">—</div><div class="etiqueta">Pico más fuerte (Hz)</div></div>
+      <div class="metrica"><div class="valor" id="v-tiempo">00:00</div><div class="etiqueta">Tiempo</div></div>
+    </div>
+
+    <div class="vivo-grid" style="margin-top:20px">
+      <div class="card"><h2>Frecuencias más fuertes</h2><ol id="v-top"></ol></div>
+      <div class="card"><h2>Frecuencia — últimos 20 s</h2><canvas id="cv-historial"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Exportar datos</h2>
+      <div class="descargas">
+        <button class="btn btn-secondary" id="exp-csv">⬇ CSV (historial)</button>
+        <button class="btn btn-secondary" id="exp-json">⬇ JSON</button>
+        <button class="btn btn-secondary" id="exp-txt">⬇ Informe TXT</button>
+        <button class="btn btn-ghost" id="exp-png-esp">⬇ PNG espectro</button>
+        <button class="btn btn-ghost" id="exp-png-hist">⬇ PNG historial</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PESTAÑA: ANÁLISIS DE MUESTRA ==================== -->
+  <section id="tab-lote" hidden>
+    <div class="card">
+      <h2><span class="num">1</span> Captura de audio</h2>
+      <div class="grid-form">
+        <div><label>Nombre (etiqueta de archivos)</label><input id="nombre" value="sonido" placeholder="ej. flauta_la4"></div>
+        <div><label>Duración (s)</label><input id="duracion" type="number" step="0.5" min="0.5" max="30" value="3"></div>
+        <div><label>Cuenta regresiva (s)</label><input id="cuenta" type="number" step="1" min="0" max="10" value="3"></div>
+        <div><label>Frecuencia de muestreo (Hz)</label>
+          <select id="fs"><option>8000</option><option>16000</option><option>22050</option><option selected>44100</option><option>48000</option></select></div>
+        <div><label>fmax del espectro (Hz)</label><input id="fmax" type="number" step="100" min="100" value="5000"></div>
+        <div><label>Dispositivo de entrada</label>
+          <div style="display:flex;gap:6px">
+            <select id="dispositivo" style="flex:1"><option value="">Predeterminado</option></select>
+            <button class="btn btn-ghost" id="btn-listar" title="Listar dispositivos">⟳</button>
+          </div></div>
+      </div>
+      <div class="acciones">
+        <button class="btn btn-primary" id="btn-grabar">🎤 Grabar</button>
+        <button class="btn btn-secondary" id="btn-wav">📁 Analizar archivo WAV</button>
+        <input type="file" id="archivo" accept=".wav,audio/wav" hidden>
+        <button class="btn btn-ghost" id="btn-demo">🎹 Nota de prueba (La4 sintética)</button>
+        <button class="btn btn-ghost" id="btn-reanalizar" hidden>↻ Reanalizar (fmax / nombre)</button>
+      </div>
+      <div id="log"></div>
+    </div>
+
+    <div class="card" id="panel-resultados" hidden style="margin-top:20px">
+      <h2><span class="num">2</span> Resultados del análisis</h2>
+      <div class="metricas">
+        <div class="metrica"><div class="valor" id="m-T">—</div><div class="etiqueta">Periodo T</div></div>
+        <div class="metrica"><div class="valor" id="m-f">—</div><div class="etiqueta">Frecuencia f = 1/T</div></div>
+        <div class="metrica"><div class="valor" id="m-w">—</div><div class="etiqueta">Frecuencia angular ω</div></div>
+        <div class="metrica"><div class="valor" id="m-pico">—</div><div class="etiqueta">Pico principal FFT</div></div>
+        <div class="metrica"><div class="valor" id="m-dur">—</div><div class="etiqueta">Duración analizada</div></div>
+        <div class="metrica"><div class="valor" id="m-fs">—</div><div class="etiqueta">Muestreo fs</div></div>
+      </div>
+      <div id="resumen"></div>
+      <div class="descargas" style="margin-top:14px">
+        <button class="btn btn-secondary" id="btn-copiar">📋 Copiar resumen</button>
+        <a class="btn btn-ghost" id="dl-txt" download>⬇ resultados .txt</a>
+        <a class="btn btn-ghost" id="dl-wav" download>⬇ audio .wav</a>
+      </div>
+    </div>
+
+    <div class="card" id="panel-figuras" hidden style="margin-top:20px">
+      <h2><span class="num">3</span> Figuras</h2>
+      <div class="figuras">
+        <div class="figura"><canvas id="fig1"></canvas></div>
+        <div class="figura"><canvas id="fig2"></canvas></div>
+        <div class="figura"><canvas id="fig3"></canvas></div>
+        <div class="figura"><canvas id="fig4"></canvas></div>
+      </div>
+      <div class="descargas" style="margin-top:14px">
+        <a class="btn btn-ghost" id="dl-f1" download>⬇ fig1_oscilacion</a>
+        <a class="btn btn-ghost" id="dl-f2" download>⬇ fig2_zoom_periodo</a>
+        <a class="btn btn-ghost" id="dl-f3" download>⬇ fig3_espectro</a>
+        <a class="btn btn-ghost" id="dl-f4" download>⬇ fig4_zoom_espectro</a>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>Frontend en JavaScript del proyecto Python <b>espectro_sonido</b> — todo el análisis corre en el navegador.</footer>
+
+<script>
+"use strict";
+/* ==================== utilidades ==================== */
+const $ = id => document.getElementById(id);
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+const fmtTiempo = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(Math.floor(s%60)).padStart(2,"0")}`;
+const sello = () => new Date().toISOString().replace(/[-:]/g,"").replace(/\..+/,"");
+
+function log(msg, tipo="info") {
+  const el = $("log"), span = document.createElement("div");
+  span.className = tipo; span.textContent = msg;
+  el.appendChild(span); el.scrollTop = el.scrollHeight;
+}
+function descargarBlob(blob, nombre) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = nombre; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function prepCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth || 600, H = cv.clientHeight || 280;
+  if (cv.width !== Math.round(W*dpr)) cv.width = Math.round(W*dpr);
+  if (cv.height !== Math.round(H*dpr)) cv.height = Math.round(H*dpr);
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { g, W, H };
+}
+
+/* ==================== FFT (Cooley-Tukey radix-2) ==================== */
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j |= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cRe = 1, cIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = i + k + len / 2;
+        const uRe = re[a], uIm = im[a];
+        const vRe = re[b] * cRe - im[b] * cIm;
+        const vIm = re[b] * cIm + im[b] * cRe;
+        re[a] = uRe + vRe; im[a] = uIm + vIm;
+        re[b] = uRe - vRe; im[b] = uIm - vIm;
+        const nRe = cRe * wRe - cIm * wIm;
+        cIm = cRe * wIm + cIm * wRe; cRe = nRe;
+      }
+    }
+  }
+}
+function ifft(re, im) {
+  const n = re.length;
+  for (let i = 0; i < n; i++) im[i] = -im[i];
+  fft(re, im);
+  for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; }
+}
+
+/* ==================== analisis (espejo de analisis.py) ==================== */
+function interpolarParabola(y0, y1, y2) {
+  const den = y0 - 2 * y1 + y2;
+  if (den === 0) return [0, y1];
+  const delta = 0.5 * (y0 - y2) / den;
+  return [delta, y1 - 0.25 * (y0 - y2) * delta];
+}
+
+function recortarSilencio(x, fs, umbral = 0.1, ventanaS = 0.02) {
+  const n = Math.max(1, Math.round(ventanaS * fs));
+  const bloques = Math.floor(x.length / n);
+  if (bloques === 0) return x;
+  const rms = new Float64Array(bloques);
+  let maxRms = 0;
+  for (let b = 0; b < bloques; b++) {
+    let s = 0; const o = b * n;
+    for (let i = 0; i < n; i++) s += x[o+i] * x[o+i];
+    rms[b] = Math.sqrt(s / n);
+    if (rms[b] > maxRms) maxRms = rms[b];
+  }
+  const um = umbral * maxRms;
+  let primero = -1, ultimo = -1;
+  for (let b = 0; b < bloques; b++) if (rms[b] >= um) { if (primero < 0) primero = b; ultimo = b; }
+  if (primero < 0) return x;
+  return x.slice(primero * n, (ultimo + 1) * n);
+}
+
+function calcularEspectro(x, fs) {
+  const size = x.length;
+  if (size < 8) throw new Error("La señal es demasiado corta para calcular el espectro.");
+  let media = 0; for (const v of x) media += v; media /= size;
+  let N = 1; while (N < size) N <<= 1;
+  N <<= 1;                                    // zero-padding: nfft = 2·2^⌈log2(size)⌉
+  const LIMITE = 1 << 21; if (N > LIMITE) N = LIMITE;  // seguridad del navegador
+  const re = new Float64Array(N), im = new Float64Array(N);
+  let wsum = 0;
+  for (let i = 0; i < size; i++) {
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (size - 1));   // Hann (np.hanning)
+    re[i] = (x[i] - media) * w; wsum += w;
+  }
+  fft(re, im);
+  const K = N / 2 + 1;
+  const freqs = new Float64Array(K), mags = new Float64Array(K);
+  for (let k = 0; k < K; k++) {
+    freqs[k] = k * fs / N;
+    mags[k] = 2 * Math.hypot(re[k], im[k]) / wsum;   // senoide de amplitud A → pico de altura A
+  }
+  return { freqs, mags, binHz: fs / N };
+}
+
+function detectarPicos(esp, { nMax = 10, umbralRel = 0.05, fmin = 20, fmax = null } = {}) {
+  const { freqs, mags, binHz } = esp;
+  const kMin = Math.max(1, Math.ceil(fmin / binHz));
+  const kMax = fmax != null ? Math.min(mags.length - 2, Math.floor(fmax / binHz)) : mags.length - 2;
+  if (kMax - kMin < 2) return [];
+  let maxA = 0;
+  for (let k = kMin; k <= kMax; k++) if (mags[k] > maxA) maxA = mags[k];
+  const um = umbralRel * maxA;
+  const cands = [];
+  for (let k = kMin + 1; k < kMax; k++)
+    if (mags[k] > mags[k-1] && mags[k] > mags[k+1] && mags[k] >= um) cands.push(k);
+  cands.sort((a, b) => mags[b] - mags[a]);            // top n_max por amplitud
+  const picos = cands.slice(0, nMax).map(k => {
+    const [delta, amp] = interpolarParabola(mags[k-1], mags[k], mags[k+1]);
+    return { frecuencia: freqs[k] + delta * binHz, amplitud: amp };
+  });
+  return picos.sort((a, b) => a.frecuencia - b.frecuencia);
+}
+
+function medirPeriodo(x, fs, fmin = 50, fmax = 4000, bufs = null) {
+  const n = x.length;
+  if (n < 16) throw new Error("La señal es demasiado corta para medir el periodo.");
+  let media = 0; for (let i = 0; i < n; i++) media += x[i]; media /= n;
+  let nfft = 1; while (nfft < 2 * n - 1) nfft <<= 1;
+  let re, im, rr, ri;
+  if (bufs && bufs.nfft === nfft) { re = bufs.re; im = bufs.im; rr = bufs.rr; ri = bufs.ri; re.fill(0); im.fill(0); }
+  else {
+    re = new Float64Array(nfft); im = new Float64Array(nfft);
+    rr = new Float64Array(nfft); ri = new Float64Array(nfft);
+    if (bufs) Object.assign(bufs, { nfft, re, im, rr, ri });
+  }
+  for (let i = 0; i < n; i++) re[i] = x[i] - media;
+  fft(re, im);
+  for (let k = 0; k < nfft; k++) { rr[k] = re[k]*re[k] + im[k]*im[k]; ri[k] = 0; }  // |X|²
+  ifft(rr, ri);                                       // autocorrelación
+  if (rr[0] <= 0) throw new Error("Señal nula: no se puede medir el periodo.");
+  const lagMin = Math.max(2, Math.floor(fs / fmax));
+  const lagMax = Math.min(Math.floor(fs / fmin), n - 2);
+  if (lagMax <= lagMin) throw new Error("Señal demasiado corta para el rango de frecuencias pedido.");
+  const r0 = rr[0];
+  let mejor = -Infinity;
+  for (let lag = lagMin; lag <= lagMax; lag++) { rr[lag] /= r0; if (rr[lag] > mejor) mejor = rr[lag]; }
+  const um = 0.9 * mejor;                             // regla del 90 % (evita error de octava)
+  let elegido = -1;
+  for (let lag = lagMin + 1; lag < lagMax; lag++)
+    if (rr[lag] > rr[lag-1] && rr[lag] > rr[lag+1] && rr[lag] >= um) { elegido = lag; break; }
+  if (elegido < 0) throw new Error("No se encontró periodicidad en la señal.");
+  const [delta] = interpolarParabola(rr[elegido-1], rr[elegido], rr[elegido+1]);
+  const periodo = (elegido + delta) / fs, f0 = 1 / periodo;
+  return { periodo, frecuencia: f0, frecuencia_angular: 2 * Math.PI * f0 };
+}
+
+function revisarNivel(señal) {
+  let pico = 0;
+  for (const v of señal) if (Math.abs(v) > pico) pico = Math.abs(v);
+  if (!señal.length || pico < 0.02)
+    return `Nivel muy bajo (pico ${pico.toFixed(3)}): acerque el instrumento al micrófono o suba la ganancia de entrada en el sistema.`;
+  if (pico >= 0.99)
+    return "La señal se saturó (recorte): aleje el instrumento o baje la ganancia, porque el recorte genera armónicos falsos en el espectro.";
+  return null;
+}
+
+const NOTAS = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+function notaDesdeFrecuencia(f) {
+  const midi = 69 + 12 * Math.log2(f / 440);
+  const red = Math.round(midi);
+  return {
+    nombre: NOTAS[((red % 12) + 12) % 12] + (Math.floor(red / 12) - 1),
+    cents: Math.round((midi - red) * 100)
+  };
+}
+
+/* ==================== captura (espejo de captura.py) ==================== */
+async function listarDispositivos() {
+  try {
+    const permiso = await navigator.mediaDevices.getUserMedia({ audio: true });
+    permiso.getTracks().forEach(t => t.stop());
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const entradas = devs.filter(d => d.kind === "audioinput");
+    $("dispositivo").innerHTML = '<option value="">Predeterminado</option>' +
+      entradas.map((d, i) => `<option value="${d.deviceId}">${d.label || "Entrada " + (i+1)}</option>`).join("");
+    log("Dispositivos de entrada disponibles:\n" +
+      entradas.map((d, i) => `  [${i}] ${d.label || "(sin nombre)"}`).join("\n"), "ok");
+  } catch (e) { log("No se pudieron listar dispositivos: " + e.message, "err"); }
+}
+
+async function grabarAudio(duracion, fsDeseada, deviceId) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: deviceId ? { exact: deviceId } : undefined,
+             echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+  });
+  let ctx;
+  try { ctx = new AudioContext({ sampleRate: fsDeseada }); } catch { ctx = new AudioContext(); }
+  await ctx.resume();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const trozos = []; let total = 0;
+  proc.onaudioprocess = e => { const d = e.inputBuffer.getChannelData(0); trozos.push(new Float32Array(d)); total += d.length; };
+  src.connect(proc); proc.connect(ctx.destination);
+  await esperar(duracion * 1000 + 120);
+  proc.onaudioprocess = null;
+  try { src.disconnect(); proc.disconnect(); } catch {}
+  stream.getTracks().forEach(t => t.stop());
+  const fs = ctx.sampleRate;
+  const n = Math.min(total, Math.round(duracion * fs) + Math.round(0.05 * fs));
+  const señal = new Float32Array(n);
+  let o = 0;
+  for (const t of trozos) for (let i = 0; i < t.length && o < n; i++) señal[o++] = t[i];
+  ctx.close();
+  if (o === 0) throw new Error("No llegó audio del micrófono. Revisa permisos y dispositivo.");
+  return { señal, fs };
+}
+
+function leerWav(buffer) {
+  const v = new DataView(buffer);
+  const str = (o, n) => { let s = ""; for (let i = 0; i < n; i++) s += String.fromCharCode(v.getUint8(o + i)); return s; };
+  if (str(0, 4) !== "RIFF" || str(8, 4) !== "WAVE") throw new Error("El archivo no es un WAV válido.");
+  let pos = 12, fmt = null, data = null;
+  while (pos + 8 <= v.byteLength) {
+    const id = str(pos, 4), size = v.getUint32(pos + 4, true);
+    if (id === "fmt " && size >= 16) fmt = {
+      code: v.getUint16(pos + 8, true), ch: v.getUint16(pos + 10, true),
+      fs: v.getUint32(pos + 12, true), bits: v.getUint16(pos + 22, true), base: pos + 8
+    };
+    else if (id === "data") data = { off: pos + 8, size };
+    pos += 8 + size + (size % 2);
+  }
+  if (!fmt || !data) throw new Error("WAV incompleto: faltan los bloques fmt o data.");
+  let code = fmt.code;
+  if (code === 0xFFFE) code = v.getUint16(fmt.base + 24, true);
+  const bytesM = fmt.bits / 8, frames = Math.floor(data.size / (bytesM * fmt.ch));
+  const x = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    let acc = 0;
+    for (let c = 0; c < fmt.ch; c++) {
+      const o = data.off + (i * fmt.ch + c) * bytesM;
+      if (code === 3 && fmt.bits === 32) acc += v.getFloat32(o, true);
+      else if (fmt.bits === 16) acc += v.getInt16(o, true) / 32768;
+      else if (fmt.bits === 8) acc += (v.getUint8(o) - 128) / 128;
+      else if (fmt.bits === 24) {
+        const val = v.getUint8(o) | (v.getUint8(o+1) << 8) | (v.getUint8(o+2) << 16);
+        acc += (val & 0x800000 ? val - 0x1000000 : val) / 8388608;
+      }
+      else if (fmt.bits === 32) acc += v.getInt32(o, true) / 2147483648;
+      else throw new Error(`Formato WAV no soportado: ${fmt.bits} bits (código ${code}).`);
+    }
+    x[i] = acc / fmt.ch;
+  }
+  return { señal: x, fs: fmt.fs };
+}
+
+function guardarWav(samples, fs) {
+  const n = samples.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); ws(8, "WAVE");
+  ws(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, fs, true); v.setUint32(28, fs * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+function generarNotaPrueba(fs, dur, f0 = 440) {
+  const n = Math.round(fs * dur), x = new Float32Array(n);
+  const arm = [1, 0.5, 0.28, 0.14, 0.08, 0.05];
+  for (let i = 0; i < n; i++) {
+    const t = i / fs;
+    let env = Math.min(1, t / 0.02) * Math.exp(-t / 1.5);
+    if (t > dur - 0.15) env *= Math.max(0, (dur - t) / 0.15);
+    let v = 0;
+    for (let h = 1; h <= arm.length; h++) v += arm[h-1] * Math.sin(2 * Math.PI * f0 * h * t + h * 0.7);
+    x[i] = 0.35 * env * v;
+  }
+  return x;
+}
+
+/* ==================== graficas (mini librería canvas) ==================== */
+function pasoBonito(span, target) {
+  const raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const r = raw / p;
+  return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * p;
+}
+class Plot {
+  constructor(canvas, titulo, ex, ey) {
+    this.cv = canvas; this.g = canvas.getContext("2d");
+    this.dpr = window.devicePixelRatio || 1;
+    this.W = canvas.clientWidth || 680; this.H = canvas.clientHeight || 280;
+    canvas.width = this.W * this.dpr; canvas.height = this.H * this.dpr;
+    this.g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.m = { l: 58, r: 14, t: 30, b: 38 };
+    this.titulo = titulo; this.ex = ex; this.ey = ey;
+    this.g.fillStyle = "#ffffff"; this.g.fillRect(0, 0, this.W, this.H);
+  }
+  range(x0, x1, y0, y1) {
+    if (x1 - x0 < 1e-9) x1 = x0 + 1;
+    if (y1 - y0 < 1e-9) y1 = y0 + 1;
+    this.x0 = x0; this.x1 = x1; this.y0 = y0; this.y1 = y1;
+  }
+  X(x) { return this.m.l + (x - this.x0) / (this.x1 - this.x0) * (this.W - this.m.l - this.m.r); }
+  Y(y) { return this.H - this.m.b - (y - this.y0) / (this.y1 - this.y0) * (this.H - this.m.t - this.m.b); }
+  ejes() {
+    const g = this.g;
+    g.strokeStyle = "#e2e8f0"; g.fillStyle = "#64748b"; g.lineWidth = 1; g.font = "10px system-ui";
+    const sx = pasoBonito(this.x1 - this.x0, 7), sy = pasoBonito(this.y1 - this.y0, 5);
+    g.textAlign = "center";
+    for (let x = Math.ceil(this.x0 / sx) * sx; x <= this.x1 + 1e-12; x += sx) {
+      const px = this.X(x);
+      g.beginPath(); g.moveTo(px, this.m.t); g.lineTo(px, this.H - this.m.b); g.stroke();
+      g.fillText(this.fmtTick(x), px, this.H - this.m.b + 14);
+    }
+    g.textAlign = "right";
+    for (let y = Math.ceil(this.y0 / sy) * sy; y <= this.y1 + 1e-12; y += sy) {
+      const py = this.Y(y);
+      g.beginPath(); g.moveTo(this.m.l, py); g.lineTo(this.W - this.m.r, py); g.stroke();
+      g.fillText(this.fmtTick(y), this.m.l - 6, py + 3);
+    }
+    g.fillStyle = "#334155"; g.font = "600 11px system-ui"; g.textAlign = "center";
+    g.fillText(this.ex, (this.m.l + this.W - this.m.r) / 2, this.H - 6);
+    g.save(); g.translate(13, (this.m.t + this.H - this.m.b) / 2); g.rotate(-Math.PI / 2);
+    g.fillText(this.ey, 0, 0); g.restore();
+    g.textAlign = "left"; g.fillStyle = "#0f172a"; g.font = "600 12px system-ui";
+    g.fillText(this.titulo, this.m.l, 18);
+  }
+  fmtTick(v) {
+    const a = Math.abs(v);
+    if (a >= 1000) return (v / 1000).toFixed(a >= 10000 ? 0 : 1) + "k";
+    if (a === 0) return "0";
+    if (a < 0.01) return v.toExponential(0);
+    return +v.toFixed(3) + "";
+  }
+  linea(xs, ys, color = "#4f46e5", lw = 1.4) {
+    const g = this.g, pxCol = this.W - this.m.l - this.m.r;
+    g.strokeStyle = color; g.lineWidth = lw; g.beginPath();
+    if (xs.length > pxCol * 2) {
+      const porCol = xs.length / pxCol;
+      for (let col = 0; col < pxCol; col++) {
+        const a = Math.floor(col * porCol), b = Math.min(xs.length, Math.floor((col + 1) * porCol));
+        let mn = ys[a], mx = ys[a];
+        for (let i = a; i < b; i++) { if (ys[i] < mn) mn = ys[i]; if (ys[i] > mx) mx = ys[i]; }
+        const px = this.X(xs[a]);
+        col === 0 ? g.moveTo(px, this.Y(mn)) : g.lineTo(px, this.Y(mn));
+        g.lineTo(px, this.Y(mx));
+      }
+    } else {
+      for (let i = 0; i < xs.length; i++) i === 0 ? g.moveTo(this.X(xs[i]), this.Y(ys[i])) : g.lineTo(this.X(xs[i]), this.Y(ys[i]));
+    }
+    g.stroke();
+  }
+  triangulo(x, y, color = "#dc2626", r = 5) {
+    const g = this.g, px = this.X(x), py = this.Y(y);
+    g.fillStyle = color;
+    g.beginPath(); g.moveTo(px, py + r); g.lineTo(px - r, py - r * 0.6); g.lineTo(px + r, py - r * 0.6);
+    g.closePath(); g.fill();
+  }
+  texto(x, y, s, { color = "#334155", dx = 0, dy = -9, align = "center", size = 10 } = {}) {
+    const g = this.g;
+    g.fillStyle = color; g.font = `${size}px system-ui`; g.textAlign = align;
+    g.fillText(s, this.X(x) + dx, this.Y(y) + dy);
+  }
+  flechaH(x1, x2, y, color = "#dc2626", etiqueta = "T") {
+    const g = this.g, ax = this.X(x1), bx = this.X(x2), ay = this.Y(y);
+    g.strokeStyle = color; g.fillStyle = color; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, ay); g.stroke();
+    for (const [x, dir] of [[ax, 1], [bx, -1]]) {
+      g.beginPath(); g.moveTo(x, ay); g.lineTo(x + 7 * dir, ay - 3.5); g.lineTo(x + 7 * dir, ay + 3.5);
+      g.closePath(); g.fill();
+    }
+    g.font = "600 12px system-ui"; g.textAlign = "center";
+    g.fillText(etiqueta, (ax + bx) / 2, ay - 6);
+  }
+  vlinea(x, color = "#dc2626") {
+    const g = this.g, px = this.X(x);
+    g.save(); g.strokeStyle = color; g.setLineDash([5, 4]); g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(px, this.m.t); g.lineTo(px, this.H - this.m.b); g.stroke(); g.restore();
+  }
+}
+
+/* ==================== PESTAÑA 2: análisis por lotes (cli.ejecutar) ==================== */
+const estado = { señal: null, fs: null, activa: null, med: null, esp: null, picos: null, principal: null, resumen: "", plots: null };
+const nombreSeguro = () => ($("nombre").value.trim() || "sonido").replace(/[^\w\-]+/g, "_");
+
+function analizarMuestra() {
+  if (!estado.señal) return;
+  try {
+    const fmax = parseFloat($("fmax").value) || 5000;
+    const activa = recortarSilencio(estado.señal, estado.fs);
+    let med;
+    try { med = medirPeriodo(activa, estado.fs); }
+    catch (e) { throw new Error(`${e.message} Intente de nuevo, con la nota más fuerte y sostenida.`); }
+    const esp = calcularEspectro(activa, estado.fs);
+    const picos = detectarPicos(esp, { fmax });
+    if (!picos.length) throw new Error("no se detectaron picos en el espectro.");
+    const principal = picos.reduce((a, b) => b.amplitud > a.amplitud ? b : a);
+    Object.assign(estado, { activa, med, esp, picos, principal });
+
+    const nombre = nombreSeguro();
+    estado.resumen = [
+      `Resultados — ${nombre}`,
+      `Frecuencia de muestreo: ${estado.fs} Hz | Duración analizada: ${(activa.length / estado.fs).toFixed(3)} s`,
+      `Periodo T            = ${(med.periodo * 1e3).toFixed(4)} ms`,
+      `Frecuencia f = 1/T   = ${med.frecuencia.toFixed(3)} Hz`,
+      `Frecuencia angular ω = ${med.frecuencia_angular.toFixed(2)} rad/s`,
+      `Pico principal (FFT) = ${principal.frecuencia.toFixed(3)} Hz`,
+      "Frecuencias componentes (FFT):",
+      ...picos.map(p => `  ${p.frecuencia.toFixed(2).padStart(9)} Hz   amplitud relativa ${(p.amplitud / principal.amplitud).toFixed(3)}`)
+    ].join("\n");
+
+    $("m-T").innerHTML = `${(med.periodo * 1e3).toFixed(4)} <small>ms</small>`;
+    $("m-f").innerHTML = `${med.frecuencia.toFixed(3)} <small>Hz</small>`;
+    $("m-w").innerHTML = `${med.frecuencia_angular.toFixed(2)} <small>rad/s</small>`;
+    $("m-pico").innerHTML = `${principal.frecuencia.toFixed(3)} <small>Hz</small>`;
+    $("m-dur").innerHTML = `${(activa.length / estado.fs).toFixed(3)} <small>s</small>`;
+    $("m-fs").innerHTML = `${estado.fs} <small>Hz</small>`;
+    $("resumen").textContent = estado.resumen;
+
+    graficarTodo();
+    prepararDescargas(nombre);
+    $("panel-resultados").hidden = false;
+    $("panel-figuras").hidden = false;
+    $("btn-reanalizar").hidden = false;
+    log(`Análisis completado: f = ${med.frecuencia.toFixed(3)} Hz · ${picos.length} componentes · pico FFT = ${principal.frecuencia.toFixed(3)} Hz`, "ok");
+  } catch (e) { log("Error: " + e.message, "err"); }
+}
+
+function graficarTodo() {
+  const { activa, med, esp, picos, principal } = estado;
+  const fs = estado.fs;
+  const t = Array.from({ length: activa.length }, (_, i) => i / fs);
+  let aMin = Infinity, aMax = -Infinity;
+  for (const v of activa) { if (v < aMin) aMin = v; if (v > aMax) aMax = v; }
+  const padA = Math.max((aMax - aMin) * 0.1, 1e-4);
+
+  const p1 = new Plot($("fig1"), "Oscilación en el tiempo", "Tiempo (s)", "Amplitud (u. arb.)");
+  p1.range(t[0], t[t.length - 1], aMin - padA, aMax + padA);
+  p1.ejes(); p1.linea(t, activa);
+
+  const ventana = Math.min(activa.length, Math.round(4 * med.periodo * fs));
+  const inicio = Math.max(0, Math.floor((activa.length - ventana) / 2));
+  const fin = Math.min(activa.length, inicio + ventana);
+  const seg = activa.slice(inicio, fin), tSeg = t.slice(inicio, fin);
+  const p2 = new Plot($("fig2"), `Zoom para medir el periodo  (T ≈ ${(med.periodo * 1e3).toFixed(3)} ms)`, "Tiempo (s)", "Amplitud (u. arb.)");
+  p2.range(tSeg[0], tSeg[tSeg.length - 1], aMin - padA, aMax + padA);
+  p2.ejes(); p2.linea(tSeg, seg);
+  let sMax = -Infinity; for (const v of seg) if (v > sMax) sMax = v;
+  let i1 = -1;
+  for (let i = 1; i < seg.length - 1; i++)
+    if (seg[i] > seg[i-1] && seg[i] > seg[i+1] && seg[i] > 0.5 * sMax) { i1 = i; break; }
+  if (i1 >= 0 && tSeg[i1] + med.periodo <= tSeg[tSeg.length - 1])
+    p2.flechaH(tSeg[i1], tSeg[i1] + med.periodo, seg[i1], "#dc2626", "T");
+
+  const fmax = parseFloat($("fmax").value) || 5000;
+  const kLim = Math.min(esp.mags.length - 1, Math.round(fmax / esp.binHz));
+  let yMax = 0;
+  for (let k = 0; k <= kLim; k++) if (esp.mags[k] > yMax) yMax = esp.mags[k];
+  const p3 = new Plot($("fig3"), "Espectro de frecuencias", "Frecuencia (Hz)", "Amplitud (u. arb.)");
+  p3.range(0, fmax, 0, yMax * 1.22);
+  p3.ejes();
+  p3.linea(esp.freqs.slice(0, kLim + 1), esp.mags.slice(0, kLim + 1));
+  for (const p of picos) if (p.frecuencia <= fmax) {
+    p3.triangulo(p.frecuencia, p.amplitud);
+    p3.texto(p.frecuencia, p.amplitud, `${p.frecuencia.toFixed(1)} Hz`);
+  }
+
+  const ancho = Math.max(0.15 * principal.frecuencia, 30.0);
+  const kA = Math.max(0, Math.floor((principal.frecuencia - ancho) / esp.binHz));
+  const kB = Math.min(esp.mags.length - 1, Math.ceil((principal.frecuencia + ancho) / esp.binHz));
+  let zMax = 0;
+  for (let k = kA; k <= kB; k++) if (esp.mags[k] > zMax) zMax = esp.mags[k];
+  const p4 = new Plot($("fig4"), `Zoom del espectro: pico principal en ${principal.frecuencia.toFixed(2)} Hz`, "Frecuencia (Hz)", "Amplitud (u. arb.)");
+  p4.range(esp.freqs[kA], esp.freqs[kB], 0, zMax * 1.18);
+  p4.ejes();
+  p4.linea(esp.freqs.slice(kA, kB + 1), esp.mags.slice(kA, kB + 1));
+  p4.vlinea(principal.frecuencia);
+  estado.plots = [p1, p2, p3, p4];
+}
+
+function prepararDescargas(nombre) {
+  const aTxt = $("dl-txt"); aTxt.dataset.sufijo = "_resultados.txt";
+  aTxt.href = URL.createObjectURL(new Blob([estado.resumen + "\n"], { type: "text/plain" }));
+  const aWav = $("dl-wav"); aWav.dataset.sufijo = ".wav";
+  aWav.href = URL.createObjectURL(guardarWav(estado.señal, estado.fs));
+  const sufs = ["_fig1_oscilacion", "_fig2_zoom_periodo", "_fig3_espectro", "_fig4_zoom_espectro"];
+  ["dl-f1", "dl-f2", "dl-f3", "dl-f4"].forEach((id, i) => {
+    const a = $(id); a.dataset.sufijo = sufs[i] + ".png";
+    a.href = estado.plots[i].cv.toDataURL("image/png");
+  });
+}
+
+ $("btn-grabar").addEventListener("click", async () => {
+  try {
+    $("btn-grabar").disabled = true;
+    const dur = Math.max(0.5, parseFloat($("duracion").value) || 3);
+    const cuenta = Math.max(0, parseInt($("cuenta").value, 10) || 0);
+    log(`Grabación en vivo de ${dur} s. Prepare el instrumento.`);
+    for (let s = cuenta; s > 0; s--) { log(`  ${s}...`); await esperar(1000); }
+    log("¡GRABANDO! Toque la nota de forma sostenida.");
+    const fsPedida = parseInt($("fs").value, 10);
+    const { señal, fs } = await grabarAudio(dur, fsPedida, $("dispositivo").value || undefined);
+    log("Grabación terminada.");
+    const aviso = revisarNivel(señal);
+    if (aviso) log("Aviso: " + aviso, "aviso");
+    estado.señal = señal; estado.fs = fs;
+    if (fs !== fsPedida) log(`Nota: el navegador muestreó a ${fs} Hz; el análisis usa esa fs.`);
+    analizarMuestra();
+  } catch (e) { log("Error: " + e.message, "err"); }
+  finally { $("btn-grabar").disabled = false; }
+});
+ $("btn-wav").addEventListener("click", () => $("archivo").click());
+ $("archivo").addEventListener("change", async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    const { señal, fs } = leerWav(await f.arrayBuffer());
+    estado.señal = señal; estado.fs = fs;
+    log(`Archivo leído: ${f.name} (${(señal.length / fs).toFixed(2)} s, ${fs} Hz)`, "ok");
+    analizarMuestra();
+  } catch (e) { log("Error: " + e.message, "err"); }
+  ev.target.value = "";
+});
+ $("btn-demo").addEventListener("click", () => {
+  const fs = parseInt($("fs").value, 10);
+  const dur = Math.max(1, parseFloat($("duracion").value) || 3);
+  estado.señal = generarNotaPrueba(fs, dur, 440);
+  estado.fs = fs;
+  log(`Nota sintética La4 (440 Hz) generada — ${dur} s a ${fs} Hz.`, "ok");
+  analizarMuestra();
+});
+ $("btn-reanalizar").addEventListener("click", analizarMuestra);
+ $("btn-listar").addEventListener("click", listarDispositivos);
+ $("btn-copiar").addEventListener("click", () =>
+  navigator.clipboard.writeText(estado.resumen)
+    .then(() => log("Resumen copiado al portapapeles.", "ok"))
+    .catch(e => log("No se pudo copiar: " + e.message, "err")));
+
+/* ==================== PESTAÑA 1: detector en vivo ==================== */
+const vivo = {
+  corriendo: false, congelado: false, ctx: null, stream: null, analizador: null, fs: null,
+  raf: null, ultimaMedicion: 0, tUltimo: null, tAcumulado: 0,
+  bufT: null, dB: null, bufsACF: {},
+  historial: [], masFuertes: new Map(), ultimas: [],
+  min: null, max: null, sumaF: 0, nF: 0, picoF: null, fActual: null
+};
+
+function dibujarEspectroVivo() {
+  const { g, W, H } = prepCanvas($("cv-espectro"));
+  const mL = 44, mR = 10, mT = 14, mB = 24;
+  g.fillStyle = "#020617"; g.fillRect(0, 0, W, H);
+  const fA = 20, fB = 20000;
+  const xDe = f => mL + Math.log10(f / fA) / Math.log10(fB / fA) * (W - mL - mR);
+  const maxDb = vivo.analizador ? vivo.analizador.maxDecibels : -20;
+  const minDb = vivo.analizador ? vivo.analizador.minDecibels : -100;
+  const yDe = db => mT + (maxDb - db) / (maxDb - minDb) * (H - mT - mB);
+  g.strokeStyle = "#1e293b"; g.fillStyle = "#64748b"; g.lineWidth = 1; g.font = "9px system-ui";
+  g.textAlign = "center";
+  for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+    const x = xDe(f);
+    g.beginPath(); g.moveTo(x, mT); g.lineTo(x, H - mB); g.stroke();
+    g.fillText(f >= 1000 ? (f / 1000) + "k" : "" + f, x, H - 8);
+  }
+  g.textAlign = "right";
+  for (let db = -20; db >= -100; db -= 20) {
+    const y = yDe(db);
+    g.beginPath(); g.moveTo(mL, y); g.lineTo(W - mR, y); g.stroke();
+    g.fillText(db, mL - 4, y + 3);
+  }
+  g.fillStyle = "#94a3b8"; g.textAlign = "left"; g.font = "600 10px system-ui";
+  g.fillText("Espectro en vivo (20 Hz – 20 kHz, dB)", mL, 10);
+  if (!vivo.dB) return;
+  const nb = vivo.dB.length, nyq = vivo.fs / 2, paso = 2;
+  g.strokeStyle = "#2dd4bf"; g.lineWidth = 1.4; g.beginPath();
+  for (let px = mL; px <= W - mR; px += paso) {
+    const f0 = fA * Math.pow(fB / fA, (px - mL) / (W - mL - mR));
+    const f1 = fA * Math.pow(fB / fA, (px + paso - mL) / (W - mL - mR));
+    const k0 = Math.max(1, Math.floor(f0 / nyq * nb));
+    const k1 = Math.min(nb - 1, Math.max(k0 + 1, Math.ceil(f1 / nyq * nb)));
+    let mx = -Infinity;
+    for (let k = k0; k < k1; k++) if (vivo.dB[k] > mx) mx = vivo.dB[k];
+    const y = isFinite(mx) ? yDe(mx) : H - mB;
+    px === mL ? g.moveTo(px, y) : g.lineTo(px, y);
+  }
+  g.stroke();
+  if (vivo.fActual) {
+    const k = Math.min(nb - 2, Math.max(1, Math.round(vivo.fActual / nyq * nb)));
+    const db = vivo.dB[k];
+    if (isFinite(db) && db > minDb) {
+      g.fillStyle = "#f87171";
+      g.beginPath(); g.arc(xDe(vivo.fActual), yDe(db), 4, 0, 2 * Math.PI); g.fill();
+    }
+  }
+}
+
+function dibujarHistorialVivo() {
+  const { g, W, H } = prepCanvas($("cv-historial"));
+  const mL = 46, mR = 10, mT = 10, mB = 22;
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);
+  const fmin = 50, fmax = 5000;
+  const t1 = vivo.tAcumulado / 1000, t0 = Math.max(0, t1 - 20);
+  const xDe = t => mL + (t - t0) / ((t1 - t0) || 1) * (W - mL - mR);
+  const yDe = f => mT + Math.log10(fmax / Math.min(fmax, Math.max(fmin, f))) / Math.log10(fmax / fmin) * (H - mT - mB);
+  g.strokeStyle = "#e2e8f0"; g.fillStyle = "#64748b"; g.lineWidth = 1; g.font = "9px system-ui";
+  g.textAlign = "right";
+  for (const f of [100, 200, 500, 1000, 2000, 5000]) {
+    const y = yDe(f);
+    g.beginPath(); g.moveTo(mL, y); g.lineTo(W - mR, y); g.stroke();
+    g.fillText(f >= 1000 ? (f / 1000) + "k" : "" + f, mL - 4, y + 3);
+  }
+  g.textAlign = "center";
+  for (let t = Math.ceil(t0 / 5) * 5; t <= t1 + 1e-9; t += 5) {
+    const x = xDe(t);
+    g.beginPath(); g.moveTo(x, mT); g.lineTo(x, H - mB); g.stroke();
+    g.fillText(t + " s", x, H - 8);
+  }
+  const pts = vivo.historial.filter(p => p.t >= t0);
+  for (const p of pts) {
+    g.globalAlpha = Math.min(1, 0.35 + p.amp * 2);
+    g.fillStyle = "#4f46e5";
+    g.beginPath(); g.arc(xDe(p.t), yDe(p.f), 2.2, 0, 2 * Math.PI); g.fill();
+  }
+  g.globalAlpha = 1;
+  if (vivo.nF) {
+    const prom = vivo.sumaF / vivo.nF;
+    g.save(); g.strokeStyle = "#0d9488"; g.setLineDash([6, 4]); g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(mL, yDe(prom)); g.lineTo(W - mR, yDe(prom)); g.stroke(); g.restore();
+    g.fillStyle = "#0d9488"; g.textAlign = "left"; g.font = "600 9px system-ui";
+    g.fillText("prom " + prom.toFixed(1) + " Hz", mL + 4, yDe(prom) - 4);
+  }
+}
+
+function actualizarStatsVivo() {
+  $("v-min").textContent = vivo.min !== null ? vivo.min.toFixed(1) : "—";
+  $("v-max").textContent = vivo.max !== null ? vivo.max.toFixed(1) : "—";
+  $("v-avg").textContent = vivo.nF ? (vivo.sumaF / vivo.nF).toFixed(1) : "—";
+  $("v-pico").textContent = vivo.picoF ? vivo.picoF.f.toFixed(1) : "—";
+}
+function renderTop() {
+  const arr = [...vivo.masFuertes.values()].sort((a, b) => b.amp - a.amp).slice(0, 5);
+  $("v-top").innerHTML = arr.length
+    ? arr.map((e, i) => `<li><span><span class="pos">${i + 1}</span>${e.f.toFixed(1)} Hz</span><span>amp ${e.amp.toFixed(3)} · ×${e.n}</span></li>`).join("")
+    : '<li><span style="color:var(--muted)">Sin lecturas aún</span></li>';
+}
+
+function vivoLoop() {
+  if (!vivo.corriendo) return;
+  vivo.raf = requestAnimationFrame(vivoLoop);
+  const ahora = performance.now();
+  if (!vivo.congelado) vivo.tAcumulado += ahora - vivo.tUltimo;
+  vivo.tUltimo = ahora;
+  if (vivo.congelado) return;
+  $("v-tiempo").textContent = fmtTiempo(vivo.tAcumulado / 1000);
+  if (ahora - vivo.ultimaMedicion < 90) return;
+  vivo.ultimaMedicion = ahora;
+
+  const an = vivo.analizador;
+  if (!vivo.bufT) vivo.bufT = new Float32Array(an.fftSize);
+  if (!vivo.dB || vivo.dB.length !== an.frequencyBinCount) vivo.dB = new Float32Array(an.frequencyBinCount);
+  an.getFloatTimeDomainData(vivo.bufT);
+  an.getFloatFrequencyData(vivo.dB);
+  dibujarEspectroVivo();
+
+  let rms = 0;
+  for (let i = 0; i < vivo.bufT.length; i++) rms += vivo.bufT[i] * vivo.bufT[i];
+  rms = Math.sqrt(rms / vivo.bufT.length);
+
+  let leida = null;
+  if (rms >= 0.01) {
+    try { leida = medirPeriodo(vivo.bufT, vivo.fs, 50, 4000, vivo.bufsACF).frecuencia; }
+    catch { leida = null; }
+  }
+
+  if (leida && leida > 0) {
+    vivo.ultimas.push(leida);
+    if (vivo.ultimas.length > 4) vivo.ultimas.shift();
+    const orden = [...vivo.ultimas].sort((a, b) => a - b);
+    const fMed = orden[Math.floor(orden.length / 2)];
+    vivo.fActual = fMed;
+
+    const nyq = vivo.fs / 2, nb = vivo.dB.length;
+    const k = Math.min(nb - 2, Math.max(1, Math.round(fMed / nyq * nb)));
+    const [, dbP] = interpolarParabola(vivo.dB[k-1], vivo.dB[k], vivo.dB[k+1]);
+    const ampLin = Math.pow(10, (isFinite(dbP) ? dbP : -100) / 20);
+
+    vivo.historial.push({ t: vivo.tAcumulado / 1000, f: fMed, amp: ampLin });
+    if (vivo.historial.length > 8000) vivo.historial = vivo.historial.filter((_, i) => i % 2 === 0);
+    if (vivo.min === null || fMed < vivo.min) vivo.min = fMed;
+    if (vivo.max === null || fMed > vivo.max) vivo.max = fMed;
+    vivo.sumaF += fMed; vivo.nF++;
+    if (!vivo.picoF || ampLin > vivo.picoF.amp) vivo.picoF = { f: fMed, amp: ampLin };
+    const clave = Math.round(fMed / 2) * 2;
+    const ent = vivo.masFuertes.get(clave) || { f: fMed, amp: 0, n: 0 };
+    ent.n++; if (ampLin > ent.amp) { ent.amp = ampLin; ent.f = fMed; }
+    vivo.masFuertes.set(clave, ent);
+
+    const nota = notaDesdeFrecuencia(fMed);
+    $("v-freq").textContent = fMed.toFixed(1);
+    $("v-nota").textContent = nota.nombre;
+    $("v-cents").textContent = (nota.cents >= 0 ? "+" : "") + nota.cents + " ¢";
+    $("v-gauge-dot").style.left = (50 + Math.max(-50, Math.min(50, nota.cents))) + "%";
+    $("v-estado").textContent = "Detectando en vivo…";
+  } else {
+    vivo.fActual = null; vivo.ultimas.length = 0;
+    $("v-freq").textContent = "—"; $("v-nota").textContent = "—"; $("v-cents").textContent = "— ¢";
+    $("v-gauge-dot").style.left = "50%";
+    $("v-estado").textContent = "En espera de señal (toca una nota sostenida)…";
+  }
+  dibujarHistorialVivo(); renderTop(); actualizarStatsVivo();
+}
+
+async function vivoComenzar() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+  });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  const an = ctx.createAnalyser();
+  an.fftSize = 16384; an.smoothingTimeConstant = 0.5;
+  an.minDecibels = -100; an.maxDecibels = -20;
+  ctx.createMediaStreamSource(stream).connect(an);
+  Object.assign(vivo, {
+    stream, ctx, analizador: an, fs: ctx.sampleRate,
+    corriendo: true, congelado: false, ultimaMedicion: 0,
+    tUltimo: performance.now(), bufT: null, dB: null
+  });
+  $("btn-vivo").textContent = "⏹ Detener";
+  $("btn-vivo").classList.remove("btn-verde"); $("btn-vivo").classList.add("btn-rojo");
+  $("btn-congelar").disabled = false;
+  $("v-estado").textContent = `Detectando a ${ctx.sampleRate} Hz…`;
+  vivo.raf = requestAnimationFrame(vivoLoop);
+}
+function vivoDetener() {
+  cancelAnimationFrame(vivo.raf);
+  try { vivo.stream.getTracks().forEach(t => t.stop()); vivo.ctx.close(); } catch {}
+  vivo.corriendo = false; vivo.congelado = false;
+  $("btn-vivo").textContent = "▶ Comenzar";
+  $("btn-vivo").classList.add("btn-verde"); $("btn-vivo").classList.remove("btn-rojo");
+  $("btn-congelar").disabled = true; $("btn-congelar").textContent = "❄ Congelar";
+  $("v-estado").textContent = "Detenido: los valores mínimo, máximo y el historial se conservan hasta pulsar «Reiniciar».";
+}
+
+ $("btn-vivo").addEventListener("click", () => {
+  if (vivo.corriendo) vivoDetener();
+  else vivoComenzar().catch(e => { $("v-estado").textContent = "Error: " + e.message; });
+});
+ $("btn-congelar").addEventListener("click", () => {
+  vivo.congelado = !vivo.congelado;
+  $("btn-congelar").textContent = vivo.congelado ? "▶ Reanudar" : "❄ Congelar";
+  $("v-estado").textContent = vivo.congelado
+    ? "Congelado: la lectura y el historial quedan fijos."
+    : "Detectando en vivo…";
+  if (!vivo.congelado) vivo.tUltimo = performance.now();
+});
+ $("btn-reiniciar").addEventListener("click", () => {
+  Object.assign(vivo, { historial: [], masFuertes: new Map(), ultimas: [],
+    min: null, max: null, sumaF: 0, nF: 0, picoF: null, fActual: null, tAcumulado: 0 });
+  $("v-freq").textContent = "—"; $("v-nota").textContent = "—"; $("v-cents").textContent = "— ¢";
+  $("v-gauge-dot").style.left = "50%"; $("v-tiempo").textContent = "00:00";
+  actualizarStatsVivo(); renderTop(); dibujarHistorialVivo();
+  if (!vivo.corriendo) $("v-estado").textContent = "Listo. Pulsa «Comenzar».";
+});
+
+/* exportación en vivo */
+ $("exp-csv").addEventListener("click", () => {
+  const filas = ["tiempo_s,frecuencia_hz,amplitud",
+    ...vivo.historial.map(p => `${p.t.toFixed(3)},${p.f.toFixed(2)},${p.amp.toPrecision(4)}`)];
+  descargarBlob(new Blob([filas.join("\n")], { type: "text/csv" }), `en_vivo_${sello()}.csv`);
+});
+ $("exp-json").addEventListener("click", () => {
+  const datos = {
+    capturado: new Date().toISOString(), fs: vivo.fs,
+    duracion_s: +(vivo.tAcumulado / 1000).toFixed(2), lecturas: vivo.nF,
+    estadisticas: { min_hz: vivo.min, max_hz: vivo.max,
+      promedio_hz: vivo.nF ? vivo.sumaF / vivo.nF : null, pico_mas_fuerte: vivo.picoF },
+    frecuencias_mas_fuertes: [...vivo.masFuertes.values()].sort((a, b) => b.amp - a.amp).slice(0, 5),
+    historial: vivo.historial
+  };
+  descargarBlob(new Blob([JSON.stringify(datos, null, 2)], { type: "application/json" }), `en_vivo_${sello()}.json`);
+});
+ $("exp-txt").addEventListener("click", () => {
+  const top = [...vivo.masFuertes.values()].sort((a, b) => b.amp - a.amp).slice(0, 5);
+  const lineas = [
+    "Resultados — Detector en vivo",
+    `Fecha: ${new Date().toLocaleString()}  |  fs: ${vivo.fs || "—"} Hz  |  Duración: ${fmtTiempo(vivo.tAcumulado / 1000)}  |  Lecturas: ${vivo.nF}`,
+    `Mínimo: ${vivo.min !== null ? vivo.min.toFixed(1) : "—"} Hz | Máximo: ${vivo.max !== null ? vivo.max.toFixed(1) : "—"} Hz | Promedio: ${vivo.nF ? (vivo.sumaF / vivo.nF).toFixed(1) : "—"} Hz`,
+    `Pico más fuerte: ${vivo.picoF ? vivo.picoF.f.toFixed(1) + " Hz (amplitud " + vivo.picoF.amp.toFixed(3) + ")" : "—"}`,
+    "Frecuencias más fuertes:",
+    ...top.map((e, i) => `  ${i + 1}. ${e.f.toFixed(1).padStart(8)} Hz   amplitud ${e.amp.toFixed(3)}   (×${e.n})`)
+  ];
+  descargarBlob(new Blob([lineas.join("\n") + "\n"], { type: "text/plain" }), `en_vivo_${sello()}_informe.txt`);
+});
+ $("exp-png-esp").addEventListener("click", () =>
+  $("cv-espectro").toBlob(b => b && descargarBlob(b, `en_vivo_${sello()}_espectro.png`)));
+ $("exp-png-hist").addEventListener("click", () =>
+  $("cv-historial").toBlob(b => b && descargarBlob(b, `en_vivo_${sello()}_historial.png`)));
+
+/* ==================== pestañas e inicio ==================== */
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("activa", x === b));
+  $("tab-vivo").hidden = b.dataset.tab !== "vivo";
+  $("tab-lote").hidden = b.dataset.tab !== "lote";
+}));
+window.addEventListener("resize", () => { dibujarEspectroVivo(); dibujarHistorialVivo(); });
+
+dibujarEspectroVivo(); dibujarHistorialVivo(); renderTop(); actualizarStatsVivo();
+log("Pestaña «Análisis de muestra» lista. Graba con micrófono, carga un WAV o usa la nota de prueba.", "ok");
+</script>
+</body>
+</html>
